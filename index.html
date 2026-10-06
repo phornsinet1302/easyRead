@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EasyRead</title>
+<style>
+  :root { --bg:#fffdf7; --ink:#1b1b1b; --brand:#0b5fff; --brand-dark:#0846c2; --card:#ffffff; --line:#d9d6cc; --warn:#fff1cc; --warn-line:#e0a800; font-size:18px; }
+  body.large { font-size:24px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Khmer","Noto Sans Thai",sans-serif; line-height:1.55; }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  header h1 { margin:0; font-size:2rem; }
+  header p { margin:.25rem 0 1rem; color:#444; }
+  label { display:block; font-weight:700; margin:1rem 0 .35rem; }
+  textarea, select { width:100%; font:inherit; padding:12px; border:2px solid var(--line); border-radius:12px; background:#fff; color:inherit; }
+  textarea { min-height:170px; resize:vertical; }
+  textarea:focus, select:focus, button:focus-visible { outline:3px solid var(--brand); outline-offset:2px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button { font:inherit; font-weight:700; padding:14px 22px; border-radius:12px; border:2px solid var(--brand); background:#fff; color:var(--brand); cursor:pointer; min-height:52px; }
+  button.primary { background:var(--brand); color:#fff; flex:1 1 220px; }
+  button.primary:hover { background:var(--brand-dark); }
+  button:disabled { opacity:.6; cursor:wait; }
+  .file-name { font-size:.85rem; color:#555; }
+  .card { background:var(--card); border:2px solid var(--line); border-radius:16px; padding:16px 18px; margin-top:18px; }
+  .card h2 { margin:.1rem 0 .5rem; font-size:1.2rem; }
+  .warn { background:var(--warn); border-color:var(--warn-line); }
+  ol { padding-left:1.3rem; margin:.3rem 0; }
+  li { margin:.5rem 0; }
+  .deadline { display:inline-block; margin-left:.4rem; padding:0 .5rem; border-radius:8px; background:#ffe9e9; font-weight:700; font-size:.85em; }
+  .tag { font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:#555; }
+  .error { color:#a30000; font-weight:700; margin-top:12px; }
+  .toggle { display:flex; gap:8px; align-items:center; font-weight:600; margin:0; }
+  .toggle input { width:22px; height:22px; }
+  .small { font-size:.8rem; color:#555; margin-top:28px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>📄 EasyRead</h1>
+    <p>Confusing papers, made clear, in your own language.</p>
+    <label class="toggle"><input type="checkbox" id="large"> Bigger text</label>
+  </header>
+
+  <label for="doc">1. Paste your document here</label>
+  <textarea id="doc" placeholder="Paste a medicine label, clinic notice, school letter, or form..."></textarea>
+
+  <div class="row">
+    <button type="button" id="photoBtn">📷 Or add a photo</button>
+    <input type="file" id="photo" accept="image/*" capture="environment" hidden>
+    <span class="file-name" id="fileName"></span>
+  </div>
+
+  <label for="lang">2. Choose your language</label>
+  <select id="lang">
+    <option value="en-US|English">English</option>
+    <option value="km-KH|Khmer (ភាសាខ្មែរ)">Khmer (ភាសាខ្មែរ)</option>
+    <option value="th-TH|Thai (ไทย)">Thai (ไทย)</option>
+    <option value="vi-VN|Vietnamese (Tiếng Việt)">Vietnamese (Tiếng Việt)</option>
+    <option value="my-MM|Burmese (မြန်မာ)">Burmese (မြန်မာ)</option>
+    <option value="id-ID|Indonesian (Bahasa Indonesia)">Indonesian</option>
+    <option value="fil-PH|Filipino (Tagalog)">Filipino (Tagalog)</option>
+    <option value="es-ES|Spanish (Español)">Spanish (Español)</option>
+    <option value="fr-FR|French (Français)">French (Français)</option>
+    <option value="ar-SA|Arabic (العربية)">Arabic (العربية)</option>
+    <option value="hi-IN|Hindi (हिन्दी)">Hindi (हिन्दी)</option>
+    <option value="sw-KE|Swahili (Kiswahili)">Swahili (Kiswahili)</option>
+    <option value="zh-CN|Chinese (中文)">Chinese (中文)</option>
+  </select>
+
+  <div class="row">
+    <button type="button" class="primary" id="go">✨ Make it easy to read</button>
+  </div>
+  <div class="error" id="error" role="alert" hidden></div>
+
+  <section id="result" hidden>
+    <div class="card warn" id="warnCard" hidden>
+      <h2>⚠️ Important</h2>
+      <p id="warnText"></p>
+    </div>
+    <div class="card">
+      <div class="tag" id="docType"></div>
+      <h2>In simple words</h2>
+      <p id="summary"></p>
+    </div>
+    <div class="card">
+      <h2>What do I need to do?</h2>
+      <ol id="steps"></ol>
+    </div>
+    <div class="row">
+      <button type="button" class="primary" id="speak">🔊 Read aloud</button>
+      <button type="button" id="stop">⏹ Stop</button>
+      <button type="button" id="toggleOrig" hidden>Show English</button>
+    </div>
+  </section>
+
+  <p class="small">EasyRead is a helper, not a doctor or lawyer. For health, money, or legal choices, please check with a professional.</p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let imageData = null;
+let current = null;      // last result from server
+let showingEnglish = false;
+
+$('large').addEventListener('change', (e) => document.body.classList.toggle('large', e.target.checked));
+$('photoBtn').addEventListener('click', () => $('photo').click());
+
+$('photo').addEventListener('change', () => {
+  const f = $('photo').files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    // Downscale big phone photos so uploads stay small
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600, scale = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      imageData = { mediaType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] };
+      $('fileName').textContent = '✅ ' + f.name;
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(f);
+});
+
+function render(view) {
+  $('summary').textContent = view.summary || '';
+  $('steps').innerHTML = '';
+  (view.steps || []).forEach((s) => {
+    const li = document.createElement('li');
+    li.textContent = s.action;
+    if (s.deadline) {
+      const d = document.createElement('span');
+      d.className = 'deadline';
+      d.textContent = '⏰ ' + s.deadline;
+      li.appendChild(d);
+    }
+    $('steps').appendChild(li);
+  });
+  $('warnCard').hidden = !view.warning;
+  $('warnText').textContent = view.warning || '';
+}
+
+function activeView() {
+  if (!current) return null;
+  return showingEnglish ? current : (current.translated || current);
+}
+
+$('go').addEventListener('click', async () => {
+  const text = $('doc').value.trim();
+  $('error').hidden = true;
+  if (!text && !imageData) { $('error').textContent = 'Please paste some text or add a photo first.'; $('error').hidden = false; return; }
+  const [code, name] = $('lang').value.split('|');
+  $('go').disabled = true; $('go').textContent = '⏳ Reading...';
+  speechSynthesis.cancel();
+  try {
+    const r = await fetch('/api/simplify', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, language: name, image: imageData }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Something went wrong');
+    current = data; showingEnglish = false;
+    $('docType').textContent = data.document_type || '';
+    render(activeView());
+    $('toggleOrig').hidden = code.startsWith('en');
+    $('toggleOrig').textContent = 'Show English';
+    $('result').hidden = false;
+    $('result').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    $('error').textContent = e.message; $('error').hidden = false;
+  } finally {
+    $('go').disabled = false; $('go').textContent = '✨ Make it easy to read';
+  }
+});
+
+$('toggleOrig').addEventListener('click', () => {
+  showingEnglish = !showingEnglish;
+  render(activeView());
+  $('toggleOrig').textContent = showingEnglish ? 'Show my language' : 'Show English';
+});
+
+$('speak').addEventListener('click', () => {
+  const v = activeView();
+  if (!v) return;
+  const parts = [];
+  if (v.warning) parts.push(v.warning);
+  parts.push(v.summary);
+  (v.steps || []).forEach((s, i) => parts.push((i + 1) + '. ' + s.action + (s.deadline ? ' (' + s.deadline + ')' : '')));
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(parts.join('. '));
+  u.lang = showingEnglish ? 'en-US' : $('lang').value.split('|')[0];
+  u.rate = 0.9;
+  speechSynthesis.speak(u);
+});
+$('stop').addEventListener('click', () => speechSynthesis.cancel());
+</script>
+</body>
+</html>
