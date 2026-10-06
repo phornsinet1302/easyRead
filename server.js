@@ -13,6 +13,7 @@ try {
 
 const PORT = process.env.PORT || 3000;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash-lite';
 
 const SYSTEM_PROMPT = `You help people who struggle to understand official or technical documents (refugees, rural communities, older adults, people with low literacy).
 Read the document the user gives you (text and/or a photo) and respond with ONLY valid JSON, no other text, in this exact shape:
@@ -66,19 +67,31 @@ async function simplify({ text, language, image }) {
     generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 4000 },
   });
 
-  // Retry on temporary overload (503) or rate limit (429) with growing delays.
+  // Try each model in turn. On temporary overload (503) or rate limit (429),
+  // retry with growing delays, then fall back to the next model.
+  const models = [MODEL, FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i);
+  const RETRIES = 3;
   let r, data;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body,
-    });
-    data = await r.json();
-    if (r.ok || (r.status !== 503 && r.status !== 429)) break;
-    await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+  outer: for (const model of models) {
+    for (let attempt = 0; attempt < RETRIES; attempt++) {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body,
+      });
+      data = await r.json();
+      if (r.ok) break outer;
+      if (r.status !== 503 && r.status !== 429) break outer; // real error, don't retry
+      if (attempt < RETRIES - 1) await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+    }
+    console.warn(`Model ${model} busy (${r.status}), ${model === models[models.length - 1] ? 'giving up' : 'trying fallback'}`);
   }
-  if (!r.ok) throw new Error((data.error && data.error.message) || 'Gemini API error');
+  if (!r.ok) {
+    if (r.status === 503 || r.status === 429) {
+      throw new Error('The AI is busy right now. Please try again in a moment.');
+    }
+    throw new Error((data.error && data.error.message) || 'Gemini API error');
+  }
 
   const raw = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [])
     .map((p) => p.text || '').join('');
